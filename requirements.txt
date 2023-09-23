@@ -1,2 +1,2 @@
-selenium
-pyautogui
+PyAutoGUI==0.9.54
+selenium==4.12.0
