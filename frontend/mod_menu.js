@@ -1,50 +1,72 @@
 const menuHTML = `
-  <dialog id="modMenu" style="padding: 20px; border-radius: 8px; border: 1px solid #333; background: #1e1e1e; color: #eee; font-family: 'Courier New', monospace; box-shadow: 0 10px 30px rgba(0,0,0,0.8); width: 300px; z-index: 9999;">
-    <h3 style="margin-top: 0; text-align: center; color: #e2b714;">MonkeyBot Painel</h3>
-    
-    <div style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
-        <div>
-            <label style="font-size: 12px;">WPM Base (Intervalo):</label>
-            <input type="range" id="speedSlider" min="0.01" max="0.1" step="0.01" value="0.05" style="width: 100%;">
-            <span id="speedValue" style="font-size: 12px; color: #e2b714;">0.05s</span>
-        </div>
-        
-        <div>
-            <label style="font-size: 12px;">Taxa de Erros (%):</label>
-            <input type="range" id="errorSlider" min="0" max="1" step="0.05" value="0.05" style="width: 100%;">
-            <span id="errorValue" style="font-size: 12px; color: #e2b714;">5%</span>
-        </div>
-    </div>
-
-    <!-- Toggle Único de Estado -->
-    <button id="btnToggleBot" data-state="stopped" style="width: 100%; padding: 12px; background: #2a9d8f; border: none; color: white; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 16px; transition: background 0.3s;">
-        ▶ INICIAR
+  <!-- Botão Nativo Discreto (Gatilho) -->
+  <div id="botTriggerContainer" style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 998;">
+    <button id="btnOpenBot" class="textButton" aria-label="AutoTyper" data-balloon-pos="left">
+        <i class="fas fa-terminal"></i>
     </button>
-  </dialog>
-
-  <!-- Botão Flutuante Fallback com Exclusão -->
-  <div id="floatingContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 9998;">
-    <span id="btnRemoveFloating" title="Ocultar ícone" style="position: absolute; top: -5px; right: -5px; background: #ff4757; color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; font-family: sans-serif; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10000;">✖</span>
-    <div id="btnFloatingMenu" style="background: #e2b714; color: #1e1e1e; padding: 12px 15px; border-radius: 50%; cursor: pointer; font-size: 24px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.2s;">
-        ⚙️
-    </div>
   </div>
+
+  <!-- Modal Furtivo (Herda 100% do design do MonkeyType) -->
+  <dialog id="modMenu" class="modalWrapper hidden">
+    <div class="modal" style="max-width: 400px; gap: 1.5rem;">
+        <div class="title">AutoTyper Config</div>
+        
+        <div style="display: grid; gap: 1.5rem;">
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: var(--sub-color); margin-bottom: 0.5rem;">
+                    <span>WPM Base (Intervalo)</span>
+                    <span id="speedValue" style="color: var(--main-color);">0.05s</span>
+                </div>
+                <!-- Sliders herdam automaticamente o estilo de barra e bolinha do tema -->
+                <input type="range" id="speedSlider" min="0.01" max="0.1" step="0.01" value="0.05" style="width: 100%;">
+            </div>
+            
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: var(--sub-color); margin-bottom: 0.5rem;">
+                    <span>Taxa de Erros (%)</span>
+                    <span id="errorValue" style="color: var(--main-color);">5%</span>
+                </div>
+                <input type="range" id="errorSlider" min="0" max="1" step="0.05" value="0.05" style="width: 100%;">
+            </div>
+        </div>
+
+        <!-- Botão Nativo (Usa a classe .button para o botão padrão e .active quando ligado) -->
+        <button id="btnToggleBot" class="button" data-state="stopped" style="width: 100%; justify-content: center; padding: 1rem;">
+            <i class="fas fa-play"></i> INICIAR
+        </button>
+    </div>
+  </dialog>
 `;
 
 document.body.insertAdjacentHTML('beforeend', menuHTML);
+
 const modal = document.getElementById('modMenu');
-const floatingContainer = document.getElementById('floatingContainer');
-const btnFloatingMenu = document.getElementById('btnFloatingMenu');
-const btnRemoveFloating = document.getElementById('btnRemoveFloating');
+const btnOpenBot = document.getElementById('btnOpenBot');
 const btnToggleBot = document.getElementById('btnToggleBot');
+
+function toggleModal() {
+    if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        modal.showModal();
+    } else {
+        modal.classList.add('hidden');
+        modal.close();
+    }
+}
 
 window.addEventListener('keydown', (event) => {
     if (event.key === 'Insert' || (event.altKey && event.key.toLowerCase() === 'm')) {
         event.preventDefault();
         event.stopPropagation();
-        modal.open ? modal.close() : modal.showModal();
+        toggleModal();
     }
 }, true);
+
+modal.addEventListener('click', (e) => {
+    if (e.target === modal) toggleModal();
+});
+
+btnOpenBot.addEventListener('click', toggleModal);
 
 btnToggleBot.addEventListener('click', () => {
     const isStopped = btnToggleBot.getAttribute('data-state') === 'stopped';
@@ -52,28 +74,15 @@ btnToggleBot.addEventListener('click', () => {
     if (isStopped) {
         sendCommand('start');
         btnToggleBot.setAttribute('data-state', 'running');
-        btnToggleBot.innerHTML = '⏸ PARAR';
-        btnToggleBot.style.background = '#e76f51'; // Vermelho
+        btnToggleBot.innerHTML = '<i class="fas fa-stop"></i> PARAR';
+        btnToggleBot.classList.add('active'); 
     } else {
         sendCommand('stop');
         btnToggleBot.setAttribute('data-state', 'stopped');
-        btnToggleBot.innerHTML = '▶ INICIAR';
-        btnToggleBot.style.background = '#2a9d8f'; // Verde
+        btnToggleBot.innerHTML = '<i class="fas fa-play"></i> INICIAR';
+        btnToggleBot.classList.remove('active');
     }
 });
-
-// Ações do Botão Flutuante
-btnFloatingMenu.addEventListener('click', () => {
-    modal.open ? modal.close() : modal.showModal();
-});
-
-btnRemoveFloating.addEventListener('click', (e) => {
-    e.stopPropagation();
-    floatingContainer.remove();
-});
-
-btnFloatingMenu.addEventListener('mouseenter', () => btnFloatingMenu.style.transform = 'scale(1.1)');
-btnFloatingMenu.addEventListener('mouseleave', () => btnFloatingMenu.style.transform = 'scale(1)');
 
 document.getElementById('speedSlider').addEventListener('input', (e) => {
     document.getElementById('speedValue').innerText = e.target.value + 's';
