@@ -1,110 +1,84 @@
+import time
+import random
+import threading
+import os
+from config import BotConfig
+from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
-import time, random, pyautogui as pg
-from threading import Thread
-from pynput.keyboard import Key, Listener
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
-
-def thread(fn):
-    def wrapper(*args, **kwargs):
-        thread = Thread(target=fn, args=args, kwargs=kwargs)
-        thread.start()
-        return thread
-    return wrapper
-
 class MonkeyBot:
-    # constants
-    TIMELIMIT = 6000     # 1 hour timeout
-    TIMEINTERVAL = 0.05  # wait 0.05 between words
-    TIMEINT_ERR = 0.02   # 0.05 +- 0.02
-    TYPOS_RATE = 0.05    # 15% percent error
-    TIMECONTROL = 30     # Gamemode in monkeytype
-
-    def __init__(self):
-        # initalize driver
+    def __init__(self, config: BotConfig):
+        self.config = config
+        self.is_running = False
+        self.type_thread = None
+        
         chrome_options = Options()
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--start-maximized")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
         self.driver = webdriver.Chrome(options=chrome_options, service=Service(ChromeDriverManager().install()))
         
-    def open_website(self, accept_cookies=True, cookie=''):
-        self.driver.get('''https://monkeytype.com/''')
-        if accept_cookies: # accept website cookies
-            assert cookie != '', 'Cookie xpath not provided'
-            self.driver.execute_script('arguments[0].click()', self.driver.find_element(by=By.XPATH, value=cookie))
-        self.driver.execute_script('alert("Click ~ To Activate The Bot; Hit Enter")')
-
-    @thread
-    def enable_fail_safe(self):
-        def on_release(key):
-            if key == Key.esc:
-                self.driver.close()
-                return False
-        with Listener(on_release=on_release) as listener:
-            listener.join()
-    
-    def activate_bot(self, human_typing=True, enable_fail_safe=False):
-        def find_words():
-            temp = self.driver.find_element(by=By.XPATH, value='//*[@id="words"]').text
-            return temp[temp.find(words[-10:])+10:] if len(words) != 0 else temp
-
-        if enable_fail_safe:
-            WebDriverWait(self.driver, self.TIMELIMIT).until_not(EC.alert_is_present())
-            self.enable_fail_safe()
-
-        while True:
-            WebDriverWait(self.driver, self.TIMELIMIT).until_not(EC.alert_is_present())
-            self.driver.execute_script('''
-                function keyDownTextField(e) {
-                    var keyCode = e.keyCode;
-                    console.log(keyCode)
-                    if (keyCode == 192) {
-                        document.removeEventListener("keydown", keyDownTextField, false);
-                        alert("Bot Activated! Hit Enter")
-                    }   
-                }
-                document.addEventListener("keydown", keyDownTextField, false);
-            ''')
-            WebDriverWait(self.driver, self.TIMELIMIT).until(EC.alert_is_present())
-            time.sleep(1.5)
-
-            start, words = time.time(), ''
-            if human_typing:
-                while time.time() - start < self.TIMECONTROL:
-                    words = find_words()
-                    self.randomize_typing_speed(words, self.TIMEINTERVAL, self.TIMEINT_ERR, self.TYPOS_RATE)
-            else:
-                while time.time() - start < self.TIMECONTROL:
-                    words = find_words()
-                    for i in words.split('\n'):
-                        pg.write(i + " ")
-            self.driver.execute_script('alert("Bot Finished Typing. Click ~ To Reactivate")')
-
-    def randomize_typing_speed(self, words, intervals, error_rate, typos_rate):
-        def add_noise():
-            if random.random() > 0.5:
-                return intervals+(random.random() * error_rate)
-            else:
-                return intervals-(random.random() * error_rate)
+    def open_and_inject(self):
+        self.driver.get('https://monkeytype.com/')
         
-        def add_errors():
-            error_words = ['during','point','place','from','problem','which','world','begin','face','go']
-            if random.random() > (1 - typos_rate):
-                random_word = random.choice(error_words)
-                pg.write(random_word, interval=add_noise())
-                pg.press('backspace', presses=len(random_word), interval=add_noise())
+        try:
+            wait = WebDriverWait(self.driver, 5)
+            cookie_xpath = '//div[@id="cookiesModal"]//button[contains(text(), "accept") or contains(text(), "Accept")]'
+            cookie_button = wait.until(EC.element_to_be_clickable((By.XPATH, cookie_xpath)))
+            self.driver.execute_script('arguments[0].click()', cookie_button)
+        except:
+            pass
+
+        # MOd Menu
+        js_path = os.path.join(os.path.dirname(__file__), 'frontend', 'mod_menu.js')
+        with open(js_path, 'r', encoding='utf-8') as f:
+            js_code = f.read()
+            self.driver.execute_script(js_code)
             
-        for i in words.split('\n'):
-            add_errors()
-            pg.write(i + " ", interval=add_noise())
+        print("[+] Mod Menu injetado. Use Ctrl+Shift+M no navegador.")
 
+    def start_typing(self):
+        if self.is_running: return
+        self.is_running = True
+        self.driver.find_element(By.TAG_NAME, 'body').click()
+        
+        # Mantenho a digitação em uma thread paralela para não bloquear a API
+        self.type_thread = threading.Thread(target=self._typing_loop, daemon=True)
+        self.type_thread.start()
 
-if __name__ == '__main__':
-    bot = MonkeyBot()
-    bot.open_website(accept_cookies=True, cookie='//*[@id="cookiesModal"]/div[2]/div[2]/div[2]/button[1]')
-    bot.activate_bot(human_typing=True, enable_fail_safe=True)
+    def stop_typing(self):
+        self.is_running = False
+
+    def _type_word(self, word: str):
+        actions = ActionChains(self.driver)
+        if random.random() > (1 - self.config.typos_rate):
+            error_word = random.choice(self.config.error_words)
+            actions.send_keys(error_word).pause(0.15)
+            for _ in error_word:
+                actions.send_keys('\ue003').pause(0.05)
+        
+        for char in word + " ":
+            noise = self.config.time_interval + random.uniform(-self.config.time_err, self.config.time_err)
+            actions.send_keys(char).pause(max(0, noise))
+        actions.perform()
+
+    def _typing_loop(self):
+        start_time = time.time()
+        while self.is_running and (time.time() - start_time < self.config.time_control):
+            try:
+                active_word_element = WebDriverWait(self.driver, 1).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".word.active"))
+                )
+                self._type_word(active_word_element.text)
+            except TimeoutException:
+                break
+        self.is_running = False

@@ -4,7 +4,7 @@ Monkeytype is a minimalistic and customizable typing test platform. It offers nu
 # How To Install
 - git clone https://github.com/CuriousAvenger/MonkeyType-Bot
 - pip install -r requirements.txt
-- python3 MonkeyBot.py
+- python3 main.py
 
 # Error Handling
 - Running MonkeyBot.py should open a browser with instructions
